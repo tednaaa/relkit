@@ -60,6 +60,10 @@ pub fn log(range: &str, excluded_subjects: &str, format: &str) -> Result<String>
 	run(&["log", range, "--no-merges", "--invert-grep", &grep, &pretty])
 }
 
+pub fn is_ignored(path: &Path) -> bool {
+	Command::new("git").args(["check-ignore", "--quiet", "--"]).arg(path).status().is_ok_and(|status| status.success())
+}
+
 pub fn is_dirty(path: &Path) -> Result<bool> {
 	Ok(!run_on(&["status", "--porcelain"], &[path])?.is_empty())
 }

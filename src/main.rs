@@ -51,17 +51,20 @@ fn release() -> Result<()> {
 	log::info(format!("{} at v{current}", manifest.name()))?;
 	announce_remote(remote_url.as_deref(), remote.as_ref())?;
 
+	let mut touched = manifest.release_files();
+	touched.push(changelog_path.clone());
+
 	let version = pick_version(current)?;
 	ask(&format!("Bump to v{version}, update the changelog and create the release commit?"), None)?;
 
-	let snapshots = [Snapshot::take(manifest.path()), Snapshot::take(&changelog_path)];
+	let snapshots: Vec<_> = touched.iter().map(|path| Snapshot::take(path)).collect();
 
-	if let Err(error) = create_release_commit(manifest.as_ref(), &changelog_path, version, remote.as_ref()) {
+	if let Err(error) = create_release_commit(manifest.as_ref(), &changelog_path, &touched, version, remote.as_ref()) {
 		for snapshot in &snapshots {
 			snapshot.restore();
 		}
 
-		log::warning(format!("Restored {} and {} — no version bump, no changelog.", manifest.name(), changelog::PATH))?;
+		log::warning(format!("Restored {} — no version bump, no changelog.", file_names(&touched)))?;
 
 		return Err(error);
 	}
@@ -110,6 +113,7 @@ fn pick_version(current: Version) -> Result<Version> {
 fn create_release_commit(
 	manifest: &dyn Manifest,
 	changelog_path: &Path,
+	touched: &[PathBuf],
 	version: Version,
 	remote: Option<&Remote>,
 ) -> Result<()> {
@@ -120,12 +124,19 @@ fn create_release_commit(
 	write_changelog(changelog_path, &version, &commits, remote)?;
 	log::step(format!("Changelog updated for v{version} ({} entries).", commits.len()))?;
 
-	let release_files = [manifest.path(), changelog_path];
-	git::add(&release_files)?;
-	git::commit(&format!("{RELEASE_COMMIT_PREFIX}{version}"), &release_files)?;
+	let staged: Vec<_> = touched.iter().map(PathBuf::as_path).filter(|path| !git::is_ignored(path)).collect();
+	git::add(&staged)?;
+	git::commit(&format!("{RELEASE_COMMIT_PREFIX}{version}"), &staged)?;
 	log::success(format!("Committed {RELEASE_COMMIT_PREFIX}{version}."))?;
 
 	Ok(())
+}
+
+fn file_names(paths: &[PathBuf]) -> String {
+	let names: Vec<_> =
+		paths.iter().filter_map(|path| path.file_name()).map(|name| name.to_string_lossy().into_owned()).collect();
+
+	names.join(", ")
 }
 
 fn commits_since_previous_release() -> Result<Vec<Commit>> {
