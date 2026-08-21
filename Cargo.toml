@@ -2,6 +2,11 @@
 name = "relkit"
 version = "0.1.0"
 edition = "2024"
+description = "Interactive release tool that bumps the version, writes a linked changelog, then commits, tags and pushes."
+license = "GPL-3.0-only"
+repository = "https://github.com/tednaaa/relkit"
+keywords = ["release", "changelog", "versioning", "git", "cli"]
+categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
 anyhow = "1.0.104"
