@@ -42,7 +42,7 @@ pub fn section(version: &str, date: &str, commits: &[Commit], remote: Option<&Re
 
 	let entries: Vec<_> = commits.iter().map(|commit| entry(commit, remote)).collect();
 
-	format!("{heading}\n{}\n", entries.join("\n"))
+	format!("{heading}\n{}\n", entries.join("\n").trim_end())
 }
 
 pub fn render(existing: Option<&str>, version: &str, section: &str) -> String {
@@ -61,15 +61,17 @@ fn entry(commit: &Commit, remote: Option<&Remote>) -> String {
 	let heading = format!("- {} {reference}", commit.subject);
 	let paragraphs = body_paragraphs(&commit.body);
 
-	if paragraphs.is_empty() { heading } else { format!("{heading}\n\n{}", paragraphs.join("\n\n")) }
+	if paragraphs.is_empty() { heading } else { format!("{heading}\n\n{}\n", paragraphs.join("\n\n")) }
 }
 
 fn body_paragraphs(body: &str) -> Vec<String> {
-	body
-		.lines()
-		.map(str::trim)
-		.filter(|line| !line.is_empty() && !is_trailer(line))
-		.map(|line| format!("  {line}"))
+	let lines: Vec<_> = body.lines().map(str::trim).filter(|line| line.is_empty() || !is_trailer(line)).collect();
+
+	lines
+		.split(|line| line.is_empty())
+		.map(|paragraph| paragraph.join(" "))
+		.filter(|paragraph| !paragraph.is_empty())
+		.map(|paragraph| format!("  {paragraph}"))
 		.collect()
 }
 
@@ -144,12 +146,35 @@ mod tests {
 	}
 
 	#[test]
-	fn indents_body_lines_and_drops_trailers() {
+	fn indents_body_paragraphs_and_drops_trailers() {
 		let body = "why it changed\n\nand a detail\nSigned-off-by: someone <a@b.c>";
 		let commits = [commit("0123456789abcdef", "add thing", body)];
 		let section = section("1.0.0", "2026-08-21", &commits, None);
 
 		assert!(section.ends_with("- add thing `01234567`\n\n  why it changed\n\n  and a detail\n"), "{section}");
+	}
+
+	#[test]
+	fn joins_wrapped_lines_into_one_paragraph() {
+		let body = "a sentence that git\nwrapped across lines\n\na second paragraph";
+		let commits = [commit("0123456789abcdef", "add thing", body)];
+		let section = section("1.0.0", "2026-08-21", &commits, None);
+
+		assert!(
+			section
+				.ends_with("- add thing `01234567`\n\n  a sentence that git wrapped across lines\n\n  a second paragraph\n"),
+			"{section}"
+		);
+	}
+
+	#[test]
+	fn separates_a_described_entry_from_the_next_one() {
+		let commits = [commit("aaaaaaaaaaaaaaaa", "described", "why it changed"), commit("bbbbbbbbbbbbbbbb", "bare", "")];
+
+		assert_eq!(
+			section("1.0.0", "2026-08-21", &commits, None),
+			"## v1.0.0 (2026-08-21)\n\n- described `aaaaaaaa`\n\n  why it changed\n\n- bare `bbbbbbbb`\n"
+		);
 	}
 
 	#[test]
