@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.1 (2026-08-22)
+
+- fix changelog body paragraph and spacing rendering [`e84f8be4`](https://github.com/tednaaa/relkit/commit/e84f8be44e35a0c5d40dbfcd838f29ee127b42d1)
+
 ## v0.1.0 (2026-08-21)
 
 - add Cargo.toml manifest support with lockfile syncing [`e38fd9fc`](https://github.com/tednaaa/relkit/commit/e38fd9fc94d149d2ef2b2e7143679f99ebfd877d)
