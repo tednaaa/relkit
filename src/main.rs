@@ -12,6 +12,7 @@ use std::process::ExitCode;
 use std::{env, fs, io};
 
 use anyhow::{Context, Result};
+use clap::Parser;
 use cliclack::{confirm, intro, log, note, outro, outro_cancel, select};
 
 use crate::changelog::Commit;
@@ -19,11 +20,17 @@ use crate::forge::Remote;
 use crate::manifest::Manifest;
 use crate::version::{Bump, Version};
 
+#[derive(Parser)]
+#[command(version, about)]
+struct Cli;
+
 const RELEASE_COMMIT_PREFIX: &str = "release: v";
 const TAG_PREFIX: &str = "v";
 const UNDO_HINT: &str = "Nothing was tagged or pushed. Undo the commit with: git reset --soft HEAD~1";
 
 fn main() -> ExitCode {
+	Cli::parse();
+
 	let Err(error) = release() else { return ExitCode::SUCCESS };
 
 	if let Some(cancelled) = error.downcast_ref::<Cancelled>() {
