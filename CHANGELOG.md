@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.2 (2026-08-22)
+
+- add --version and --help flags via clap [`a7055963`](https://github.com/tednaaa/relkit/commit/a70559634f76ef151f20acd6957463ffc2891c36)
+
 ## v0.1.1 (2026-08-22)
 
 - fix changelog body paragraph and spacing rendering [`e84f8be4`](https://github.com/tednaaa/relkit/commit/e84f8be44e35a0c5d40dbfcd838f29ee127b42d1)
