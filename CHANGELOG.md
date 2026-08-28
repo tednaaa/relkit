@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.0 (2026-08-28)
+
+- fix(manifest): skip comments when scanning json manifests [`eb947c37`](https://github.com/tednaaa/relkit/commit/eb947c3773b31b453d520ab37cbd1366730af208)
+- feat(manifest): support browser extension manifest.json [`f2e8e8df`](https://github.com/tednaaa/relkit/commit/f2e8e8dff21b7ee5fc4d75208b6d798f9fe8130b)
+
 ## v0.1.2 (2026-08-22)
 
 - add --version and --help flags via clap [`a7055963`](https://github.com/tednaaa/relkit/commit/a70559634f76ef151f20acd6957463ffc2891c36)
