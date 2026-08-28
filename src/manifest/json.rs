@@ -79,6 +79,11 @@ impl<'a> Scanner<'a> {
 						return self.read_value();
 					}
 				},
+				b'/' => {
+					if !self.skip_comment() {
+						self.index += 1;
+					}
+				},
 				_ => self.index += 1,
 			}
 		}
@@ -87,7 +92,7 @@ impl<'a> Scanner<'a> {
 	}
 
 	fn read_value(&mut self) -> Option<Range<usize>> {
-		self.skip_whitespace();
+		self.skip_trivia();
 
 		if self.peek() != Some(b'"') {
 			return None;
@@ -115,7 +120,7 @@ impl<'a> Scanner<'a> {
 	}
 
 	fn accept(&mut self, byte: u8) -> bool {
-		self.skip_whitespace();
+		self.skip_trivia();
 
 		if self.peek() != Some(byte) {
 			return false;
@@ -126,10 +131,34 @@ impl<'a> Scanner<'a> {
 		true
 	}
 
-	fn skip_whitespace(&mut self) {
-		while self.peek().is_some_and(|byte| byte.is_ascii_whitespace()) {
-			self.index += 1;
+	fn skip_trivia(&mut self) {
+		loop {
+			while self.peek().is_some_and(|byte| byte.is_ascii_whitespace()) {
+				self.index += 1;
+			}
+
+			if !self.skip_comment() {
+				return;
+			}
 		}
+	}
+
+	fn skip_comment(&mut self) -> bool {
+		if self.peek() != Some(b'/') {
+			return false;
+		}
+
+		self.index = match self.source.as_bytes().get(self.index + 1) {
+			Some(b'/') => self.end_of(self.index + 2, "\n"),
+			Some(b'*') => self.end_of(self.index + 2, "*/"),
+			_ => return false,
+		};
+
+		true
+	}
+
+	fn end_of(&self, start: usize, terminator: &str) -> usize {
+		self.source[start..].find(terminator).map_or(self.source.len(), |end| start + end + terminator.len())
 	}
 
 	fn peek(&self) -> Option<u8> {
@@ -228,5 +257,32 @@ mod tests {
 }"#;
 
 		assert_eq!(version_of(source).as_deref(), Some("0.1.0"));
+	}
+
+	#[test]
+	fn ignores_versions_hidden_in_comments() {
+		let source = "{\n\t// \"version\": \"9.9.9\",\n\t/* \"version\": \"8.8.8\" */\n\t\"version\": \"0.1.0\"\n}\n";
+
+		assert_eq!(version_of(source).as_deref(), Some("0.1.0"));
+	}
+
+	#[test]
+	fn is_not_confused_by_braces_inside_comments() {
+		let source = "{\n\t// { [ \"version\": \"9.9.9\"\n\t/* } ] */\n\t\"version\": \"0.1.0\"\n}\n";
+
+		assert_eq!(version_of(source).as_deref(), Some("0.1.0"));
+	}
+
+	#[test]
+	fn reads_a_version_separated_from_its_key_by_a_comment() {
+		let source = "{\n\t\"version\" /* pinned */ : // release\n\t\t\"0.1.0\"\n}\n";
+
+		assert_eq!(version_of(source).as_deref(), Some("0.1.0"));
+	}
+
+	#[test]
+	fn survives_unterminated_comments() {
+		assert_eq!(version_of("{\n\t\"version\": \"0.1.0\"\n} // trailing"), Some("0.1.0".to_owned()));
+		assert_eq!(version_of("{ /* \"version\": \"9.9.9\""), None);
 	}
 }
