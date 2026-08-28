@@ -8,11 +8,11 @@ use crate::manifest::Manifest;
 
 const VERSION_KEY: &str = "version";
 
-pub struct PackageJson {
+pub struct Json {
 	path: PathBuf,
 }
 
-impl PackageJson {
+impl Json {
 	pub fn new(path: PathBuf) -> Self {
 		Self { path }
 	}
@@ -28,7 +28,7 @@ impl PackageJson {
 	}
 }
 
-impl Manifest for PackageJson {
+impl Manifest for Json {
 	fn path(&self) -> &Path {
 		&self.path
 	}
@@ -183,5 +183,50 @@ mod tests {
 		updated.replace_range(span, "1.3.0");
 
 		assert_eq!(updated, "{\n\t\"name\": \"pkg\",\n\t\"version\": \"1.3.0\",\n\t\"private\": true\n}\n");
+	}
+
+	#[test]
+	fn reads_and_rewrites_a_chrome_extension_manifest() {
+		let source = r#"{
+	"manifest_version": 3,
+	"name": "СОН — сбор обратных номеров",
+	"version": "0.1.0",
+	"permissions": ["sidePanel", "tabs"],
+	"background": { "service_worker": "background.js", "type": "module" },
+	"icons": { "16": "icons/16.png", "128": "icons/128.png" }
+}"#;
+
+		assert_eq!(version_of(source).as_deref(), Some("0.1.0"));
+
+		let span = Scanner::new(source).top_level_string_value(VERSION_KEY).unwrap();
+		let mut updated = source.to_owned();
+		updated.replace_range(span, "0.2.0");
+
+		assert!(updated.contains("\"version\": \"0.2.0\""), "{updated}");
+		assert!(updated.contains("СОН — сбор обратных номеров"), "{updated}");
+	}
+
+	#[test]
+	fn reads_the_version_of_a_firefox_extension_manifest() {
+		let source = r#"{
+	"manifest_version": 2,
+	"name": "Better Trading",
+	"version": "2.0.1",
+	"browser_specific_settings": { "gecko": { "id": "{c097f8f9-aec1-43cf-b6da-a88eff70a918}" } },
+	"content_scripts": [{ "matches": ["*://*.tradingview.com/*"], "js": ["content.js"] }]
+}"#;
+
+		assert_eq!(version_of(source).as_deref(), Some("2.0.1"));
+	}
+
+	#[test]
+	fn ignores_a_version_nested_in_an_extension_manifest() {
+		let source = r#"{
+	"manifest_version": 3,
+	"browser_specific_settings": { "gecko": { "version": "9.9.9" } },
+	"version": "0.1.0"
+}"#;
+
+		assert_eq!(version_of(source).as_deref(), Some("0.1.0"));
 	}
 }

@@ -17,7 +17,7 @@ use cliclack::{confirm, intro, log, note, outro, outro_cancel, select};
 
 use crate::changelog::Commit;
 use crate::forge::Remote;
-use crate::manifest::Manifest;
+use crate::manifest::Manifests;
 use crate::version::{Bump, Version};
 
 #[derive(Parser)]
@@ -49,16 +49,16 @@ fn release() -> Result<()> {
 	git::ensure_repository()?;
 
 	let directory = env::current_dir().context("failed to resolve the current directory")?;
-	let manifest = manifest::discover(&directory)?;
+	let manifests = manifest::discover(&directory)?;
 	let changelog_path = directory.join(changelog::PATH);
-	let current = Version::parse(&manifest.read_version()?)?;
+	let current = Version::parse(&manifests.read_version()?)?;
 	let remote_url = git::remote_url();
 	let remote = remote_url.as_deref().and_then(Remote::parse);
 
-	log::info(format!("{} at v{current}", manifest.name()))?;
+	log::info(format!("{} at v{current}", manifests.name()))?;
 	announce_remote(remote_url.as_deref(), remote.as_ref())?;
 
-	let mut touched = manifest.release_files();
+	let mut touched = manifests.release_files();
 	touched.push(changelog_path.clone());
 
 	let version = pick_version(current)?;
@@ -66,7 +66,7 @@ fn release() -> Result<()> {
 
 	let snapshots: Vec<_> = touched.iter().map(|path| Snapshot::take(path)).collect();
 
-	if let Err(error) = create_release_commit(manifest.as_ref(), &changelog_path, &touched, version, remote.as_ref()) {
+	if let Err(error) = create_release_commit(&manifests, &changelog_path, &touched, version, remote.as_ref()) {
 		for snapshot in &snapshots {
 			snapshot.restore();
 		}
@@ -118,14 +118,14 @@ fn pick_version(current: Version) -> Result<Version> {
 }
 
 fn create_release_commit(
-	manifest: &dyn Manifest,
+	manifests: &Manifests,
 	changelog_path: &Path,
 	touched: &[PathBuf],
 	version: Version,
 	remote: Option<&Remote>,
 ) -> Result<()> {
 	let version = version.to_string();
-	manifest.write_version(&version)?;
+	manifests.write_version(&version)?;
 
 	let commits = commits_since_previous_release()?;
 	write_changelog(changelog_path, &version, &commits, remote)?;
