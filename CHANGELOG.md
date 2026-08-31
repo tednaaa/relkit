@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.3.0 (2026-08-31)
+
+- feat(cli): add --no-manifest to release from tags without bumping manifests [`202ade59`](https://github.com/tednaaa/relkit/commit/202ade59bea6a773ca938e15c3c3d25112f7e0fc)
+
 ## v0.2.0 (2026-08-28)
 
 - fix(manifest): skip comments when scanning json manifests [`eb947c37`](https://github.com/tednaaa/relkit/commit/eb947c3773b31b453d520ab37cbd1366730af208)
