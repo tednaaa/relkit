@@ -22,16 +22,19 @@ use crate::version::{Bump, Version};
 
 #[derive(Parser)]
 #[command(version, about)]
-struct Cli;
+struct Cli {
+	#[arg(long, help = "Ignore manifest files and take the current version from the latest release tag")]
+	no_manifest: bool,
+}
 
 const RELEASE_COMMIT_PREFIX: &str = "release: v";
 const TAG_PREFIX: &str = "v";
 const UNDO_HINT: &str = "Nothing was tagged or pushed. Undo the commit with: git reset --soft HEAD~1";
 
 fn main() -> ExitCode {
-	Cli::parse();
+	let cli = Cli::parse();
 
-	let Err(error) = release() else { return ExitCode::SUCCESS };
+	let Err(error) = release(&cli) else { return ExitCode::SUCCESS };
 
 	if let Some(cancelled) = error.downcast_ref::<Cancelled>() {
 		let _ = outro_cancel(cancelled);
@@ -44,34 +47,34 @@ fn main() -> ExitCode {
 	ExitCode::FAILURE
 }
 
-fn release() -> Result<()> {
+fn release(cli: &Cli) -> Result<()> {
 	intro("release")?;
 	git::ensure_repository()?;
 
 	let directory = env::current_dir().context("failed to resolve the current directory")?;
-	let manifests = manifest::discover(&directory)?;
+	let versioning = Versioning::discover(&directory, cli.no_manifest)?;
 	let changelog_path = directory.join(changelog::PATH);
-	let current = Version::parse(&manifests.read_version()?)?;
+	let current = versioning.current_version()?;
 	let remote_url = git::remote_url();
 	let remote = remote_url.as_deref().and_then(Remote::parse);
 
-	log::info(format!("{} at v{current}", manifests.name()))?;
+	log::info(format!("{} at v{current}", versioning.source()))?;
 	announce_remote(remote_url.as_deref(), remote.as_ref())?;
 
-	let mut touched = manifests.release_files();
+	let mut touched = versioning.release_files();
 	touched.push(changelog_path.clone());
 
 	let version = pick_version(current)?;
-	ask(&format!("Bump to v{version}, update the changelog and create the release commit?"), None)?;
+	ask(&format!("Release v{version} — update the changelog and create the release commit?"), None)?;
 
 	let snapshots: Vec<_> = touched.iter().map(|path| Snapshot::take(path)).collect();
 
-	if let Err(error) = create_release_commit(&manifests, &changelog_path, &touched, version, remote.as_ref()) {
+	if let Err(error) = create_release_commit(&versioning, &changelog_path, &touched, version, remote.as_ref()) {
 		for snapshot in &snapshots {
 			snapshot.restore();
 		}
 
-		log::warning(format!("Restored {} — no version bump, no changelog.", file_names(&touched)))?;
+		log::warning(format!("Restored {} — nothing was released.", file_names(&touched)))?;
 
 		return Err(error);
 	}
@@ -118,14 +121,14 @@ fn pick_version(current: Version) -> Result<Version> {
 }
 
 fn create_release_commit(
-	manifests: &Manifests,
+	versioning: &Versioning,
 	changelog_path: &Path,
 	touched: &[PathBuf],
 	version: Version,
 	remote: Option<&Remote>,
 ) -> Result<()> {
 	let version = version.to_string();
-	manifests.write_version(&version)?;
+	versioning.write_version(&version)?;
 
 	let commits = commits_since_previous_release()?;
 	write_changelog(changelog_path, &version, &commits, remote)?;
@@ -198,6 +201,55 @@ fn cancel_on_interrupt<T>(result: io::Result<T>, hint: Option<&str>) -> Result<T
 		Err(error) if error.kind() == io::ErrorKind::Interrupted => Err(Cancelled::new(hint).into()),
 		other => Ok(other?),
 	}
+}
+
+enum Versioning {
+	Manifests(Manifests),
+	Tags,
+}
+
+impl Versioning {
+	fn discover(directory: &Path, ignore_manifests: bool) -> Result<Self> {
+		if ignore_manifests {
+			return Ok(Self::Tags);
+		}
+
+		Ok(Self::Manifests(manifest::discover(directory)?))
+	}
+
+	fn source(&self) -> String {
+		match self {
+			Self::Manifests(manifests) => manifests.name(),
+			Self::Tags => "git tags".to_owned(),
+		}
+	}
+
+	fn current_version(&self) -> Result<Version> {
+		match self {
+			Self::Manifests(manifests) => Version::parse(&manifests.read_version()?),
+			Self::Tags => latest_tagged_version(),
+		}
+	}
+
+	fn write_version(&self, version: &str) -> Result<()> {
+		match self {
+			Self::Manifests(manifests) => manifests.write_version(version),
+			Self::Tags => Ok(()),
+		}
+	}
+
+	fn release_files(&self) -> Vec<PathBuf> {
+		match self {
+			Self::Manifests(manifests) => manifests.release_files(),
+			Self::Tags => Vec::new(),
+		}
+	}
+}
+
+fn latest_tagged_version() -> Result<Version> {
+	let Some(tag) = git::previous_release_tag() else { return Ok(Version::default()) };
+
+	Version::parse(tag.trim_start_matches(TAG_PREFIX))
 }
 
 struct Snapshot {
