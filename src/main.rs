@@ -12,7 +12,8 @@ use std::process::ExitCode;
 use std::{env, fs, io};
 
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+use clap_complete::{Shell, generate};
 use cliclack::{confirm, intro, log, note, outro, outro_cancel, select};
 
 use crate::changelog::Commit;
@@ -25,6 +26,9 @@ use crate::version::{Bump, Version};
 struct Cli {
 	#[arg(long, help = "Ignore manifest files and take the current version from the latest release tag")]
 	no_manifest: bool,
+
+	#[arg(long, value_name = "SHELL", help = "Print a completion script for the given shell to stdout")]
+	completions: Option<Shell>,
 }
 
 const RELEASE_COMMIT_PREFIX: &str = "release: v";
@@ -33,6 +37,12 @@ const UNDO_HINT: &str = "Nothing was tagged or pushed. Undo the commit with: git
 
 fn main() -> ExitCode {
 	let cli = Cli::parse();
+
+	if let Some(shell) = cli.completions {
+		print_completions(shell);
+
+		return ExitCode::SUCCESS;
+	}
 
 	let Err(error) = release(&cli) else { return ExitCode::SUCCESS };
 
@@ -45,6 +55,13 @@ fn main() -> ExitCode {
 	let _ = outro_cancel(format!("Release failed: {error:#}"));
 
 	ExitCode::FAILURE
+}
+
+fn print_completions(shell: Shell) {
+	let mut command = Cli::command();
+	let name = command.get_name().to_owned();
+
+	generate(shell, &mut command, name, &mut io::stdout());
 }
 
 fn release(cli: &Cli) -> Result<()> {
