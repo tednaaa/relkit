@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.4.0 (2026-08-31)
+
+- feat(cli): add --completions to generate shell completion scripts [`6527ebe6`](https://github.com/tednaaa/relkit/commit/6527ebe6f0d4de9e1ffb04b84c80a8f54aac72a4)
+
 ## v0.3.0 (2026-08-31)
 
 - feat(cli): add --no-manifest to release from tags without bumping manifests [`202ade59`](https://github.com/tednaaa/relkit/commit/202ade59bea6a773ca938e15c3c3d25112f7e0fc)
