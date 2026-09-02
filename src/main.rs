@@ -24,9 +24,6 @@ use crate::version::{Bump, Version};
 #[derive(Parser)]
 #[command(version, about)]
 struct Cli {
-	#[arg(long, help = "Ignore manifest files and take the current version from the latest release tag")]
-	no_manifest: bool,
-
 	#[arg(long, value_name = "SHELL", help = "Print a completion script for the given shell to stdout")]
 	completions: Option<Shell>,
 }
@@ -44,7 +41,7 @@ fn main() -> ExitCode {
 		return ExitCode::SUCCESS;
 	}
 
-	let Err(error) = release(&cli) else { return ExitCode::SUCCESS };
+	let Err(error) = release() else { return ExitCode::SUCCESS };
 
 	if let Some(cancelled) = error.downcast_ref::<Cancelled>() {
 		let _ = outro_cancel(cancelled);
@@ -64,18 +61,18 @@ fn print_completions(shell: Shell) {
 	generate(shell, &mut command, name, &mut io::stdout());
 }
 
-fn release(cli: &Cli) -> Result<()> {
+fn release() -> Result<()> {
 	intro("release")?;
 	git::ensure_repository()?;
 
 	let directory = env::current_dir().context("failed to resolve the current directory")?;
-	let versioning = Versioning::discover(&directory, cli.no_manifest)?;
+	let versioning = manifest::discover(&directory).map_or(Versioning::Tags, Versioning::Manifests);
 	let changelog_path = directory.join(changelog::PATH);
 	let current = versioning.current_version()?;
 	let remote_url = git::remote_url();
 	let remote = remote_url.as_deref().and_then(Remote::parse);
 
-	log::info(format!("{} at v{current}", versioning.source()))?;
+	announce_version(&versioning, current)?;
 	announce_remote(remote_url.as_deref(), remote.as_ref())?;
 
 	let mut touched = versioning.release_files();
@@ -103,6 +100,15 @@ fn release(cli: &Cli) -> Result<()> {
 
 	git::push()?;
 	outro(format!("Released {tag}."))?;
+
+	Ok(())
+}
+
+fn announce_version(versioning: &Versioning, current: Version) -> Result<()> {
+	match versioning {
+		Versioning::Manifests(manifests) => log::info(format!("{} at v{current}", manifests.name()))?,
+		Versioning::Tags => log::warning(format!("No manifest to bump — using v{current} from the latest git tag."))?,
+	}
 
 	Ok(())
 }
@@ -224,21 +230,6 @@ enum Versioning {
 }
 
 impl Versioning {
-	fn discover(directory: &Path, ignore_manifests: bool) -> Result<Self> {
-		if ignore_manifests {
-			return Ok(Self::Tags);
-		}
-
-		Ok(Self::Manifests(manifest::discover(directory)?))
-	}
-
-	fn source(&self) -> String {
-		match self {
-			Self::Manifests(manifests) => manifests.name(),
-			Self::Tags => "git tags".to_owned(),
-		}
-	}
-
 	fn current_version(&self) -> Result<Version> {
 		match self {
 			Self::Manifests(manifests) => Version::parse(&manifests.read_version()?),

@@ -36,6 +36,12 @@ pub struct Manifests {
 }
 
 impl Manifests {
+	fn versioned(candidates: Vec<Box<dyn Manifest>>) -> Option<Self> {
+		let manifests: Vec<_> = candidates.into_iter().filter(|manifest| manifest.read_version().is_ok()).collect();
+
+		(!manifests.is_empty()).then_some(Self { manifests })
+	}
+
 	pub fn name(&self) -> String {
 		self.manifests.iter().map(|manifest| manifest.name()).collect::<Vec<_>>().join(", ")
 	}
@@ -64,21 +70,15 @@ impl Manifests {
 	}
 }
 
-pub fn discover(directory: &Path) -> Result<Manifests> {
-	let manifests: Vec<_> = SUPPORTED
-		.iter()
-		.map(|(file_name, open)| (directory.join(file_name), open))
-		.filter(|(path, _)| path.is_file())
-		.map(|(path, open)| open(path))
-		.collect();
-
-	if manifests.is_empty() {
-		let supported: Vec<_> = SUPPORTED.iter().map(|(file_name, _)| *file_name).collect();
-
-		bail!("no supported manifest in {} (looked for: {})", directory.display(), supported.join(", "));
-	}
-
-	Ok(Manifests { manifests })
+pub fn discover(directory: &Path) -> Option<Manifests> {
+	Manifests::versioned(
+		SUPPORTED
+			.iter()
+			.map(|(file_name, open)| (directory.join(file_name), open))
+			.filter(|(path, _)| path.is_file())
+			.map(|(path, open)| open(path))
+			.collect(),
+	)
 }
 
 fn listed(versions: &[(String, String)]) -> String {
@@ -93,12 +93,16 @@ mod tests {
 
 	struct Fake {
 		path: PathBuf,
-		version: RefCell<String>,
+		version: RefCell<Option<String>>,
 	}
 
 	impl Fake {
 		fn new(name: &str, version: &str) -> Self {
-			Self { path: PathBuf::from(name), version: RefCell::new(version.to_owned()) }
+			Self { path: PathBuf::from(name), version: RefCell::new(Some(version.to_owned())) }
+		}
+
+		fn unversioned(name: &str) -> Self {
+			Self { path: PathBuf::from(name), version: RefCell::new(None) }
 		}
 	}
 
@@ -108,11 +112,11 @@ mod tests {
 		}
 
 		fn read_version(&self) -> Result<String> {
-			Ok(self.version.borrow().clone())
+			self.version.borrow().clone().with_context(|| format!("{} has no version", self.name()))
 		}
 
 		fn write_version(&self, version: &str) -> Result<()> {
-			*self.version.borrow_mut() = version.to_owned();
+			*self.version.borrow_mut() = Some(version.to_owned());
 
 			Ok(())
 		}
@@ -155,9 +159,20 @@ mod tests {
 	}
 
 	#[test]
-	fn reports_a_directory_without_a_manifest() {
-		let Err(error) = discover(Path::new("/nonexistent")) else { panic!("a missing directory has no manifest") };
+	fn finds_nothing_in_a_directory_without_a_manifest() {
+		assert!(discover(Path::new("/nonexistent")).is_none());
+	}
 
-		assert!(error.to_string().contains("manifest.json"), "{error}");
+	#[test]
+	fn keeps_only_the_manifests_that_carry_a_version() {
+		let candidates: Vec<Box<dyn Manifest>> =
+			vec![Box::new(Fake::unversioned("Cargo.toml")), Box::new(Fake::new("package.json", "0.1.0"))];
+
+		assert_eq!(Manifests::versioned(candidates).unwrap().name(), "package.json");
+	}
+
+	#[test]
+	fn finds_nothing_when_no_manifest_carries_a_version() {
+		assert!(Manifests::versioned(vec![Box::new(Fake::unversioned("Cargo.toml"))]).is_none());
 	}
 }
