@@ -30,6 +30,7 @@ struct Cli {
 
 const RELEASE_COMMIT_PREFIX: &str = "release: v";
 const TAG_PREFIX: &str = "v";
+const MISSING_REMOTE: &str = "no git remote to push to — add one with `git remote add origin <url>`";
 const UNDO_HINT: &str = "Nothing was tagged or pushed. Undo the commit with: git reset --soft HEAD~1";
 
 fn main() -> ExitCode {
@@ -65,15 +66,15 @@ fn release() -> Result<()> {
 	intro("release")?;
 	git::ensure_releasable()?;
 
+	let remote_url = git::remote_url().context(MISSING_REMOTE)?;
+	let remote = Remote::parse(&remote_url);
 	let directory = env::current_dir().context("failed to resolve the current directory")?;
 	let versioning = manifest::discover(&directory).map_or(Versioning::Tags, Versioning::Manifests);
 	let changelog_path = directory.join(changelog::PATH);
 	let current = versioning.current_version()?;
-	let remote_url = git::remote_url();
-	let remote = remote_url.as_deref().and_then(Remote::parse);
 
 	announce_version(&versioning, current)?;
-	announce_remote(remote_url.as_deref(), remote.as_ref())?;
+	announce_remote(&remote_url, remote.as_ref())?;
 
 	let mut touched = versioning.release_files();
 	touched.push(changelog_path.clone());
@@ -113,19 +114,11 @@ fn announce_version(versioning: &Versioning, current: Version) -> Result<()> {
 	Ok(())
 }
 
-fn announce_remote(url: Option<&str>, remote: Option<&Remote>) -> Result<()> {
-	if let Some(remote) = remote {
-		log::info(format!("Linking commits to {} ({}).", remote.host(), remote.forge().label()))?;
-
-		return Ok(());
+fn announce_remote(url: &str, remote: Option<&Remote>) -> Result<()> {
+	match remote {
+		Some(remote) => log::info(format!("Linking commits to {} ({}).", remote.host(), remote.forge().label()))?,
+		None => log::warning(format!("Changelog entries will not link to commits — `{url}` has no web address."))?,
 	}
-
-	let reason = match url {
-		Some(url) => format!("`{url}` has no web address"),
-		None => "there is no git remote".to_owned(),
-	};
-
-	log::warning(format!("Changelog entries will not link to commits — {reason}."))?;
 
 	Ok(())
 }
