@@ -1,12 +1,16 @@
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Output};
 
 use anyhow::{Context, Result, bail};
 
 const RELEASE_TAG_GLOB: &str = "v[0-9]*.[0-9]*.[0-9]*";
 
+fn spawn(args: &[&str]) -> Result<Output> {
+	Command::new("git").args(args).output().context("failed to spawn `git` — is it installed?")
+}
+
 fn run(args: &[&str]) -> Result<String> {
-	let output = Command::new("git").args(args).output().context("failed to spawn `git` — is it installed?")?;
+	let output = spawn(args)?;
 
 	if !output.status.success() {
 		let stderr = String::from_utf8_lossy(&output.stderr);
@@ -15,6 +19,10 @@ fn run(args: &[&str]) -> Result<String> {
 	}
 
 	Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+}
+
+fn succeeds(args: &[&str]) -> Result<bool> {
+	Ok(spawn(args)?.status.success())
 }
 
 fn run_on(args: &[&str], paths: &[&Path]) -> Result<String> {
@@ -31,8 +39,14 @@ fn output_of(args: &[&str]) -> Option<String> {
 	run(args).ok().filter(|output| !output.is_empty())
 }
 
-pub fn ensure_repository() -> Result<()> {
-	run(&["rev-parse", "--git-dir"]).context("not a git repository")?;
+pub fn ensure_releasable() -> Result<()> {
+	if !succeeds(&["rev-parse", "--git-dir"])? {
+		bail!("not a git repository — run `git init` first");
+	}
+
+	if !succeeds(&["rev-parse", "--verify", "HEAD"])? {
+		bail!("this repository has no commits yet — commit your work before releasing");
+	}
 
 	Ok(())
 }

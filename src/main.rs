@@ -63,7 +63,7 @@ fn print_completions(shell: Shell) {
 
 fn release() -> Result<()> {
 	intro("release")?;
-	git::ensure_repository()?;
+	git::ensure_releasable()?;
 
 	let directory = env::current_dir().context("failed to resolve the current directory")?;
 	let versioning = manifest::discover(&directory).map_or(Versioning::Tags, Versioning::Manifests);
