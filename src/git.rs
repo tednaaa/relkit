@@ -98,6 +98,12 @@ pub fn commit(message: &str, paths: &[&Path]) -> Result<()> {
 	Ok(())
 }
 
+pub fn undo_commit() -> Result<()> {
+	run(&["reset", "--soft", "HEAD~1"])?;
+
+	Ok(())
+}
+
 pub fn amend() -> Result<()> {
 	run(&["commit", "--amend", "--no-edit"])?;
 

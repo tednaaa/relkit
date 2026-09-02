@@ -31,7 +31,6 @@ struct Cli {
 const RELEASE_COMMIT_PREFIX: &str = "release: v";
 const TAG_PREFIX: &str = "v";
 const MISSING_REMOTE: &str = "no git remote to push to — add one with `git remote add origin <url>`";
-const UNDO_HINT: &str = "Nothing was tagged or pushed. Undo the commit with: git reset --soft HEAD~1";
 
 fn main() -> ExitCode {
 	let cli = Cli::parse();
@@ -83,16 +82,17 @@ fn release() -> Result<()> {
 	let snapshots: Vec<_> = touched.iter().map(|path| Snapshot::take(path)).collect();
 
 	if let Err(error) = create_release_commit(&versioning, &changelog_path, &touched, version, remote.as_ref()) {
-		for snapshot in &snapshots {
-			snapshot.restore();
-		}
-
-		log::warning(format!("Restored {} — nothing was released.", file_names(&touched)))?;
+		discard_changes(&snapshots, &touched)?;
 
 		return Err(error);
 	}
 
-	review_changelog(version)?;
+	if let Err(error) = review_changelog(version) {
+		discard_release_commit(&snapshots, &touched)?;
+
+		return Err(error);
+	}
+
 	amend_changelog_edits(&changelog_path)?;
 
 	let tag = format!("{TAG_PREFIX}{version}");
@@ -131,7 +131,7 @@ fn pick_version(current: Version) -> Result<Version> {
 		prompt = prompt.item(next, format!("{} → {next}", bump.label()), "");
 	}
 
-	cancel_on_interrupt(prompt.interact(), None)
+	cancel_on_interrupt(prompt.interact())
 }
 
 fn create_release_commit(
@@ -152,6 +152,22 @@ fn create_release_commit(
 	git::add(&staged)?;
 	git::commit(&format!("{RELEASE_COMMIT_PREFIX}{version}"), &staged)?;
 	log::success(format!("Committed {RELEASE_COMMIT_PREFIX}{version}."))?;
+
+	Ok(())
+}
+
+fn discard_release_commit(snapshots: &[Snapshot], touched: &[PathBuf]) -> Result<()> {
+	git::undo_commit()?;
+
+	discard_changes(snapshots, touched)
+}
+
+fn discard_changes(snapshots: &[Snapshot], touched: &[PathBuf]) -> Result<()> {
+	for snapshot in snapshots {
+		snapshot.restore();
+	}
+
+	log::warning(format!("Restored {} — nothing was released.", file_names(touched)))?;
 
 	Ok(())
 }
@@ -187,7 +203,7 @@ fn review_changelog(version: Version) -> Result<()> {
 		),
 	)?;
 
-	ask("Changelog looks good — tag and push?", Some(UNDO_HINT))
+	ask("Changelog looks good — tag and push?")
 }
 
 fn amend_changelog_edits(path: &Path) -> Result<()> {
@@ -204,15 +220,15 @@ fn amend_changelog_edits(path: &Path) -> Result<()> {
 	Ok(())
 }
 
-fn ask(message: &str, hint: Option<&str>) -> Result<()> {
-	let confirmed = cancel_on_interrupt(confirm(message).initial_value(true).interact(), hint)?;
+fn ask(message: &str) -> Result<()> {
+	let confirmed = cancel_on_interrupt(confirm(message).initial_value(true).interact())?;
 
-	if confirmed { Ok(()) } else { Err(Cancelled::new(hint).into()) }
+	if confirmed { Ok(()) } else { Err(Cancelled.into()) }
 }
 
-fn cancel_on_interrupt<T>(result: io::Result<T>, hint: Option<&str>) -> Result<T> {
+fn cancel_on_interrupt<T>(result: io::Result<T>) -> Result<T> {
 	match result {
-		Err(error) if error.kind() == io::ErrorKind::Interrupted => Err(Cancelled::new(hint).into()),
+		Err(error) if error.kind() == io::ErrorKind::Interrupted => Err(Cancelled.into()),
 		other => Ok(other?),
 	}
 }
@@ -272,22 +288,11 @@ impl Snapshot {
 }
 
 #[derive(Debug)]
-struct Cancelled {
-	hint: Option<String>,
-}
-
-impl Cancelled {
-	fn new(hint: Option<&str>) -> Self {
-		Self { hint: hint.map(ToOwned::to_owned) }
-	}
-}
+struct Cancelled;
 
 impl Display for Cancelled {
 	fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-		match &self.hint {
-			Some(hint) => write!(formatter, "Release cancelled. {hint}"),
-			None => write!(formatter, "Release cancelled."),
-		}
+		write!(formatter, "Release cancelled.")
 	}
 }
 
