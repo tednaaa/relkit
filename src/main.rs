@@ -82,8 +82,6 @@ fn release(cli: &Cli) -> Result<()> {
 	touched.push(changelog_path.clone());
 
 	let version = pick_version(current)?;
-	ask(&format!("Release v{version} — update the changelog and create the release commit?"), None)?;
-
 	let snapshots: Vec<_> = touched.iter().map(|path| Snapshot::take(path)).collect();
 
 	if let Err(error) = create_release_commit(&versioning, &changelog_path, &touched, version, remote.as_ref()) {
