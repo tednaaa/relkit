@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.0 (2026-09-02)
+
+- fix(cli): roll back the release commit when the changelog review is declined [`7b8d02ac`](https://github.com/tednaaa/relkit/commit/7b8d02ac61e1c4c3b8d91c4ac865c3ef511ab1f4)
+- fix(cli): require a git remote before starting a release [`9957b290`](https://github.com/tednaaa/relkit/commit/9957b290abcdb15ded706dd531a1108190545907)
+- fix(git): fail with a clear message when the repository has no commits [`a36afc9c`](https://github.com/tednaaa/relkit/commit/a36afc9c772c620a49c52254505e9f4f6881a541)
+- fix(manifest): fall back to the latest git tag when no manifest has a version [`57801e6a`](https://github.com/tednaaa/relkit/commit/57801e6af5a450e76227868a5f7e004f1bc1f0eb)
+- refactor(cli): drop the release commit confirmation prompt [`c6a33f11`](https://github.com/tednaaa/relkit/commit/c6a33f118258570b5519064d51e27c83535ca402)
+
 ## v0.4.0 (2026-08-31)
 
 - feat(cli): add --completions to generate shell completion scripts [`6527ebe6`](https://github.com/tednaaa/relkit/commit/6527ebe6f0d4de9e1ffb04b84c80a8f54aac72a4)
