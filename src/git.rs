@@ -71,7 +71,7 @@ pub fn log(range: &str, excluded_subjects: &str, format: &str) -> Result<String>
 	let grep = format!("--grep={excluded_subjects}");
 	let pretty = format!("--pretty=format:{format}");
 
-	run(&["log", range, "--no-merges", "--invert-grep", &grep, &pretty])
+	run(&["log", range, "--first-parent", "--invert-grep", &grep, &pretty])
 }
 
 pub fn is_ignored(path: &Path) -> bool {
