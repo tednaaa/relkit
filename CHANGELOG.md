@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.5.1 (2026-09-08)
+
+- fix(git): walk first-parent history so a merge replaces its branch commits [`17c87eb0`](https://github.com/tednaaa/relkit/commit/17c87eb00ae0a14430905557cdb8dd2b5fb4e6d1)
+
 ## v0.5.0 (2026-09-02)
 
 - fix(cli): roll back the release commit when the changelog review is declined [`7b8d02ac`](https://github.com/tednaaa/relkit/commit/7b8d02ac61e1c4c3b8d91c4ac865c3ef511ab1f4)
