@@ -130,7 +130,7 @@ mod tests {
 
 	#[test]
 	fn parses_empty_log_as_no_commits() {
-		assert!(parse("").is_empty());
+		assert_eq!(parse(""), Vec::<Commit>::new());
 	}
 
 	#[test]

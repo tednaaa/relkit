@@ -1,7 +1,10 @@
 { pkgs, ... }:
 {
   languages = {
-    rust.enable = true;
+    rust = {
+      enable = true;
+      toolchainFile = ./rust-toolchain.toml;
+    };
   };
 
   packages = [ pkgs.lefthook ];
