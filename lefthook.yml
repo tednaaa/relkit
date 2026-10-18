@@ -1,0 +1,10 @@
+pre-commit:
+  parallel: true
+  jobs:
+    - name: clippy
+      glob: "*.rs"
+      run: cargo clippy --locked --all-targets -- --deny warnings
+
+    - name: test
+      glob: "*.rs"
+      run: cargo test --locked
