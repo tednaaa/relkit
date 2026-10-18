@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.6.0 (2026-10-18)
+
+- feat(cli): add --with-description flag [`df92157e`](https://github.com/tednaaa/relkit/commit/df92157e6eda5bca754c3cf83c8a96266ee68f5e)
+
 ## v0.5.1 (2026-09-08)
 
 - fix(git): walk first-parent history so a merge replaces its branch commits [`17c87eb0`](https://github.com/tednaaa/relkit/commit/17c87eb00ae0a14430905557cdb8dd2b5fb4e6d1)
