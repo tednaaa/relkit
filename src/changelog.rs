@@ -33,14 +33,20 @@ pub fn parse(raw: &str) -> Vec<Commit> {
 		.collect()
 }
 
-pub fn section(version: &str, date: &str, commits: &[Commit], remote: Option<&Remote>) -> String {
+pub fn section(
+	version: &str,
+	date: &str,
+	commits: &[Commit],
+	remote: Option<&Remote>,
+	with_description: bool,
+) -> String {
 	let heading = format!("{SECTION_PREFIX}{version} ({date})\n");
 
 	if commits.is_empty() {
 		return heading;
 	}
 
-	let entries: Vec<_> = commits.iter().map(|commit| entry(commit, remote)).collect();
+	let entries: Vec<_> = commits.iter().map(|commit| entry(commit, remote, with_description)).collect();
 
 	format!("{heading}\n{}\n", entries.join("\n").trim_end())
 }
@@ -51,7 +57,7 @@ pub fn render(existing: Option<&str>, version: &str, section: &str) -> String {
 	format!("{HEADING}\n\n{section}\n{body}")
 }
 
-fn entry(commit: &Commit, remote: Option<&Remote>) -> String {
+fn entry(commit: &Commit, remote: Option<&Remote>, with_description: bool) -> String {
 	let short_sha = commit.sha.get(..8).unwrap_or(&commit.sha);
 	let reference = match remote {
 		Some(remote) => format!("[`{short_sha}`]({})", remote.commit_url(&commit.sha)),
@@ -59,7 +65,7 @@ fn entry(commit: &Commit, remote: Option<&Remote>) -> String {
 	};
 
 	let heading = format!("- {} {reference}", commit.subject);
-	let paragraphs = body_paragraphs(&commit.body);
+	let paragraphs = if with_description { body_paragraphs(&commit.body) } else { Vec::new() };
 
 	if paragraphs.is_empty() { heading } else { format!("{heading}\n\n{}\n", paragraphs.join("\n\n")) }
 }
@@ -130,7 +136,7 @@ mod tests {
 	#[test]
 	fn links_commits_to_the_remote() {
 		let commits = [commit("0123456789abcdef", "add thing", "")];
-		let section = section("1.0.0", "2026-08-21", &commits, Some(&remote()));
+		let section = section("1.0.0", "2026-08-21", &commits, Some(&remote()), false);
 
 		assert_eq!(
 			section,
@@ -142,14 +148,25 @@ mod tests {
 	fn falls_back_to_a_bare_sha_without_a_remote() {
 		let commits = [commit("0123456789abcdef", "add thing", "")];
 
-		assert_eq!(section("1.0.0", "2026-08-21", &commits, None), "## v1.0.0 (2026-08-21)\n\n- add thing `01234567`\n");
+		assert_eq!(
+			section("1.0.0", "2026-08-21", &commits, None, false),
+			"## v1.0.0 (2026-08-21)\n\n- add thing `01234567`\n"
+		);
+	}
+
+	#[test]
+	fn omits_the_description_unless_asked() {
+		let commits = [commit("0123456789abcdef", "add thing", "why it changed")];
+		let section = section("1.0.0", "2026-08-21", &commits, None, false);
+
+		assert_eq!(section, "## v1.0.0 (2026-08-21)\n\n- add thing `01234567`\n");
 	}
 
 	#[test]
 	fn indents_body_paragraphs_and_drops_trailers() {
 		let body = "why it changed\n\nand a detail\nSigned-off-by: someone <a@b.c>";
 		let commits = [commit("0123456789abcdef", "add thing", body)];
-		let section = section("1.0.0", "2026-08-21", &commits, None);
+		let section = section("1.0.0", "2026-08-21", &commits, None, true);
 
 		assert!(section.ends_with("- add thing `01234567`\n\n  why it changed\n\n  and a detail\n"), "{section}");
 	}
@@ -158,7 +175,7 @@ mod tests {
 	fn joins_wrapped_lines_into_one_paragraph() {
 		let body = "a sentence that git\nwrapped across lines\n\na second paragraph";
 		let commits = [commit("0123456789abcdef", "add thing", body)];
-		let section = section("1.0.0", "2026-08-21", &commits, None);
+		let section = section("1.0.0", "2026-08-21", &commits, None, true);
 
 		assert!(
 			section
@@ -172,7 +189,7 @@ mod tests {
 		let commits = [commit("aaaaaaaaaaaaaaaa", "described", "why it changed"), commit("bbbbbbbbbbbbbbbb", "bare", "")];
 
 		assert_eq!(
-			section("1.0.0", "2026-08-21", &commits, None),
+			section("1.0.0", "2026-08-21", &commits, None, true),
 			"## v1.0.0 (2026-08-21)\n\n- described `aaaaaaaa`\n\n  why it changed\n\n- bare `bbbbbbbb`\n"
 		);
 	}
@@ -186,7 +203,7 @@ mod tests {
 
 	#[test]
 	fn writes_an_empty_section_when_nothing_changed() {
-		assert_eq!(section("1.0.0", "2026-08-21", &[], None), "## v1.0.0 (2026-08-21)\n");
+		assert_eq!(section("1.0.0", "2026-08-21", &[], None, false), "## v1.0.0 (2026-08-21)\n");
 	}
 
 	#[test]

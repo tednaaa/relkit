@@ -26,6 +26,9 @@ use crate::version::{Bump, Version};
 struct Cli {
 	#[arg(long, value_name = "SHELL", help = "Print a completion script for the given shell to stdout")]
 	completions: Option<Shell>,
+
+	#[arg(long, help = "Include commit descriptions in the changelog, not only subjects")]
+	with_description: bool,
 }
 
 const RELEASE_COMMIT_PREFIX: &str = "release: v";
@@ -41,7 +44,7 @@ fn main() -> ExitCode {
 		return ExitCode::SUCCESS;
 	}
 
-	let Err(error) = release() else { return ExitCode::SUCCESS };
+	let Err(error) = release(cli.with_description) else { return ExitCode::SUCCESS };
 
 	if let Some(cancelled) = error.downcast_ref::<Cancelled>() {
 		let _ = outro_cancel(cancelled);
@@ -61,7 +64,7 @@ fn print_completions(shell: Shell) {
 	generate(shell, &mut command, name, &mut io::stdout());
 }
 
-fn release() -> Result<()> {
+fn release(with_description: bool) -> Result<()> {
 	intro("release")?;
 	git::ensure_releasable()?;
 
@@ -81,7 +84,10 @@ fn release() -> Result<()> {
 	let version = pick_version(current)?;
 	let snapshots: Vec<_> = touched.iter().map(|path| Snapshot::take(path)).collect();
 
-	if let Err(error) = create_release_commit(&versioning, &changelog_path, &touched, version, remote.as_ref()) {
+	let release_commit =
+		create_release_commit(&versioning, &changelog_path, &touched, version, remote.as_ref(), with_description);
+
+	if let Err(error) = release_commit {
 		discard_changes(&snapshots, &touched)?;
 
 		return Err(error);
@@ -140,12 +146,13 @@ fn create_release_commit(
 	touched: &[PathBuf],
 	version: Version,
 	remote: Option<&Remote>,
+	with_description: bool,
 ) -> Result<()> {
 	let version = version.to_string();
 	versioning.write_version(&version)?;
 
 	let commits = commits_since_previous_release()?;
-	write_changelog(changelog_path, &version, &commits, remote)?;
+	write_changelog(changelog_path, &version, &commits, remote, with_description)?;
 	log::step(format!("Changelog updated for v{version} ({} entries).", commits.len()))?;
 
 	let staged: Vec<_> = touched.iter().map(PathBuf::as_path).filter(|path| !git::is_ignored(path)).collect();
@@ -186,8 +193,14 @@ fn commits_since_previous_release() -> Result<Vec<Commit>> {
 	Ok(changelog::parse(&raw))
 }
 
-fn write_changelog(path: &Path, version: &str, commits: &[Commit], remote: Option<&Remote>) -> Result<()> {
-	let section = changelog::section(version, &date::today_utc(), commits, remote);
+fn write_changelog(
+	path: &Path,
+	version: &str,
+	commits: &[Commit],
+	remote: Option<&Remote>,
+	with_description: bool,
+) -> Result<()> {
+	let section = changelog::section(version, &date::today_utc(), commits, remote, with_description);
 	let existing = fs::read_to_string(path).ok();
 
 	fs::write(path, changelog::render(existing.as_deref(), version, &section))
